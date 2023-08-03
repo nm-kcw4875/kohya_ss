@@ -830,6 +830,7 @@ def SaveConfigFile(parameters, file_path: str, exclusion = ['file_path', 'save_a
         for name, value in sorted(parameters, key=lambda x: x[0])
         if name not in exclusion
     }
+    file_path = os.path.join("./presets/lora", file_path)
 
     # Save the data to the selected file
     with open(file_path, 'w') as file:

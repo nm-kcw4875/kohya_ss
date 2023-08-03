@@ -47,6 +47,7 @@ def UI(**kwargs):
                 logging_dir_input,
             ) = dreambooth_tab(headless=headless)
         with gr.Tab('LoRA'):
+            
             lora_tab(headless=headless)
         with gr.Tab('Textual Inversion'):
             ti_tab(headless=headless)

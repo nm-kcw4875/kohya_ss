@@ -23,13 +23,12 @@ def utilities_tab(
     enable_dreambooth_tab=True,
     headless=False
 ):
-    with gr.Tab('Captioning'):
-        gradio_basic_caption_gui_tab(headless=headless)
-        gradio_blip_caption_gui_tab(headless=headless)
-        gradio_git_caption_gui_tab(headless=headless)
-        gradio_wd14_caption_gui_tab(headless=headless)
-    gradio_convert_model_tab(headless=headless)
-    gradio_group_images_gui_tab(headless=headless)
+    #gradio_basic_caption_gui_tab(headless=headless)
+    gradio_blip_caption_gui_tab(headless=headless)
+    #gradio_git_caption_gui_tab(headless=headless)
+    gradio_wd14_caption_gui_tab(headless=headless)
+    #gradio_convert_model_tab(headless=headless)
+    #gradio_group_images_gui_tab(headless=headless)
 
     return (
         train_data_dir_input,

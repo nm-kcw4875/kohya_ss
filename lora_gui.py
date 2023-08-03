@@ -45,6 +45,15 @@ from library.class_sample_images import SampleImages, run_cmd_sample
 from library.class_lora_tab import LoRATools
 
 from library.custom_logging import setup_logging
+import google.cloud.logging
+import requests
+import redis
+
+
+log_client = google.cloud.logging.Client()
+log_client.setup_logging()
+gcp_logger = log_client.logger(name="kohya-webui")
+
 
 # Set up logging
 log = setup_logging()
@@ -56,7 +65,67 @@ button_run = gr.Button('Start training', variant='primary')
             
 button_stop_training = gr.Button('Stop training')
 
+folder_symbol = '\U0001f4c2'  # 📂
+refresh_symbol = '\U0001f504'  # 🔄
+save_style_symbol = '\U0001f4be'  # 💾
 document_symbol = '\U0001F4C4'   # 📄
+
+
+class ToolButton(gr.Button, gr.components.FormComponent):
+    """Small button with single emoji as text, fits inside gradio forms"""
+
+    def __init__(self, **kwargs):
+        super().__init__(variant="tool", **kwargs)
+
+    def get_block_name(self):
+        return "button"
+
+
+def get_sd_models():
+    output = [""]
+    out_dir = "../stable-diffusion-webui/models/Stable-diffusion/"
+    for root, dirs, files in os.walk(out_dir, followlinks=True):
+        for file in files:
+            if file.split(".")[-1]=='safetensors' or file.split(".")[-1]=='ckpt':
+                output.append(os.path.relpath(os.path.join(root, file), out_dir))
+
+    return output
+
+
+def get_preset_lists():
+    output = [""]
+    #out_dir = "../models/ai-based-generative-art-style-inference/"
+    out_dir = "./presets/lora"
+
+    if os.path.exists(out_dir):
+        for item in os.listdir(out_dir):
+            if item.split(".")[-1]=='json' :
+                #output.append(os.path.join(out_dir, item))
+                output.append(item)
+
+    return output
+
+
+
+def create_refresh_button(refresh_component, refresh_method, refreshed_args, elem_id):
+    def refresh():
+        refresh_method()
+        args = refreshed_args() if callable(refreshed_args) else refreshed_args
+
+        for k, v in args.items():
+            setattr(refresh_component, k, v)
+
+        return gr.update(**(args or {}))
+
+    refresh_button = ToolButton(value=refresh_symbol, elem_id=elem_id)
+    refresh_button.click(
+        fn=refresh,
+        inputs=[],
+        outputs=[refresh_component]
+    )
+    #refresh_button.style(full_width=False)
+    return refresh_button
+
 
 def save_configuration(
     save_as,
@@ -191,14 +260,175 @@ def save_configuration(
         return original_file_path  # In case a file_path was provided and the user decide to cancel the open action
 
     # Extract the destination directory from the file path
-    destination_directory = os.path.dirname(file_path)
-
-    # Create the destination directory if it doesn't exist
-    if not os.path.exists(destination_directory):
-        os.makedirs(destination_directory)
+    #destination_directory = os.path.dirname(file_path)
+#
+    ## Create the destination directory if it doesn't exist
+    #if not os.path.exists(destination_directory):
+    #    os.makedirs(destination_directory)
 
     SaveConfigFile(parameters=parameters, file_path=file_path, exclusion=['file_path', 'save_as'])
 
+    return file_path
+
+
+def save_configuration_gcp_log(
+    save_as,
+    file_path,
+    pretrained_model_name_or_path,
+    v2,
+    v_parameterization,
+    sdxl,
+    logging_dir,
+    train_data_dir,
+    reg_data_dir,
+    output_dir,
+    max_resolution,
+    learning_rate,
+    lr_scheduler,
+    lr_warmup,
+    train_batch_size,
+    epoch,
+    save_every_n_epochs,
+    mixed_precision,
+    save_precision,
+    seed,
+    num_cpu_threads_per_process,
+    cache_latents,
+    cache_latents_to_disk,
+    caption_extension,
+    enable_bucket,
+    gradient_checkpointing,
+    full_fp16,
+    no_token_padding,
+    stop_text_encoder_training,
+    min_bucket_reso,
+    max_bucket_reso,
+    # use_8bit_adam,
+    xformers,
+    save_model_as,
+    shuffle_caption,
+    save_state,
+    resume,
+    prior_loss_weight,
+    text_encoder_lr,
+    unet_lr,
+    network_dim,
+    lora_network_weights,
+    dim_from_weights,
+    color_aug,
+    flip_aug,
+    clip_skip,
+    gradient_accumulation_steps,
+    mem_eff_attn,
+    output_name,
+    model_list,
+    max_token_length,
+    max_train_epochs,
+    max_data_loader_n_workers,
+    network_alpha,
+    training_comment,
+    keep_tokens,
+    lr_scheduler_num_cycles,
+    lr_scheduler_power,
+    persistent_data_loader_workers,
+    bucket_no_upscale,
+    random_crop,
+    bucket_reso_steps,
+    caption_dropout_every_n_epochs,
+    caption_dropout_rate,
+    optimizer,
+    optimizer_args,
+    noise_offset_type,
+    noise_offset,
+    adaptive_noise_scale,
+    multires_noise_iterations,
+    multires_noise_discount,
+    LoRA_type,
+    factor,
+    use_cp,
+    decompose_both,
+    train_on_input,
+    conv_dim,
+    conv_alpha,
+    sample_every_n_steps,
+    sample_every_n_epochs,
+    sample_sampler,
+    sample_prompts,
+    additional_parameters,
+    vae_batch_size,
+    min_snr_gamma,
+    down_lr_weight,
+    mid_lr_weight,
+    up_lr_weight,
+    block_lr_zero_threshold,
+    block_dims,
+    block_alphas,
+    conv_block_dims,
+    conv_block_alphas,
+    weighted_captions,
+    unit,
+    save_every_n_steps,
+    save_last_n_steps,
+    save_last_n_steps_state,
+    use_wandb,
+    wandb_api_key,
+    scale_v_pred_loss_like_noise_pred,
+    scale_weight_norms,
+    network_dropout,
+    rank_dropout,
+    module_dropout,
+    sdxl_cache_text_encoder_outputs,
+    sdxl_no_half_vae,
+    full_bf16,
+    min_timestep,
+    max_timestep,
+):
+    # Get list of function parameters and values
+    parameters = list(locals().items())
+
+    original_file_path = file_path
+
+    save_as_bool = True if save_as.get('label') == 'True' else False
+
+    if save_as_bool:
+        log.info('Save as...')
+        file_path = get_saveasfile_path(file_path)
+    else:
+        log.info('Save...')
+        if file_path == None or file_path == '':
+            file_path = get_saveasfile_path(file_path)
+
+    # log.info(file_path)
+
+    if file_path == None or file_path == '':
+        return original_file_path  # In case a file_path was provided and the user decide to cancel the open action
+
+    variables = {
+        name: value
+        for name, value in parameters  # locals().items()
+        if name
+        not in [
+            'file_path',
+            'save_as',
+        ]
+    }
+    headers = {'Metadata-Flavor': 'Google'}
+    url = 'http://metadata/computeMetadata/v1/instance/hostname'
+    response = requests.get(url, headers=headers)
+
+    hostname = response.text.strip()
+    vm_name = hostname.split('.')[0]
+
+    stable_diffusion_redis = redis.Redis(host="10.128.0.174", port=6379, db=0, charset="utf-8", decode_responses=True)
+    user_id = stable_diffusion_redis.hget(vm_name, "user")
+    group_id = stable_diffusion_redis.hget(vm_name, "group")
+    variables.update({"user_id": user_id})
+    variables.update({"group_id": group_id})
+    variables.update({"vm_name": vm_name})
+
+    #print("gcp log")
+    gcp_logger.log(variables, resource={"type": "global", "labels": {
+                   "project": "stable-diffusion-webui"}})
     return file_path
 
 
@@ -325,7 +555,9 @@ def open_configuration(
     # Check if we are "applying" a preset or a config
     if apply_preset:
         log.info(f'Applying preset {training_preset}...')
-        file_path = f'./presets/lora/{training_preset}.json'
+        #file_path = f'./presets/lora/{training_preset}.json'
+        file_path = f'./presets/lora/{training_preset}'
+
     else:
         # If not applying a preset, set the `training_preset` field to an empty string
         # Find the index of the `training_preset` parameter using the `index()` method
@@ -693,7 +925,8 @@ def train_model(
     if weighted_captions:
         run_cmd += ' --weighted_captions'
     run_cmd += (
-        f' --pretrained_model_name_or_path="{pretrained_model_name_or_path}"'
+        f' --pretrained_model_name_or_path="{os.path.join("/home/workspace/stable-diffusion-webui/models/Stable-diffusion/", pretrained_model_name_or_path)}"'
+        #f' --pretrained_model_name_or_path="{pretrained_model_name_or_path}"'
     )
     run_cmd += f' --train_data_dir="{train_data_dir}"'
     if len(reg_data_dir):
@@ -976,9 +1209,9 @@ def train_model(
         formatted_datetime = current_datetime.strftime("%Y%m%d-%H%M%S")
         file_path = os.path.join(output_dir, f'{output_name}_{formatted_datetime}.json')
         
-        log.info(f'Saving training config to {file_path}...')
-
-        SaveConfigFile(parameters=parameters, file_path=file_path, exclusion=['file_path', 'save_as', 'headless', 'print_only'])
+        #log.info(f'Saving training config to {file_path}...')
+#
+        #SaveConfigFile(parameters=parameters, file_path=file_path, exclusion=['file_path', 'save_as', 'headless', 'print_only'])
         
         log.info(run_cmd)
         # Run the command
@@ -1013,6 +1246,22 @@ def lora_tab(
         # Setup Configuration Files Gradio
         config = ConfigurationFile(headless)
 
+
+        with gr.Tab('4. Folders'):
+            folders = Folders(headless=headless)
+
+        with gr.Tab('3. Folders Prep'):
+            lora_tools = LoRATools(folders=folders, headless=headless)
+
+        with gr.Tab('2. Captioning'):
+            utilities_tab(
+               train_data_dir_input=train_data_dir_input,
+               reg_data_dir_input=reg_data_dir_input,
+               output_dir_input=output_dir_input,
+               logging_dir_input=logging_dir_input,
+               enable_copy_info_button=True,
+               headless=headless,)
+            
         source_model = SourceModel(
             save_model_as_choices=[
                 'ckpt',
@@ -1020,33 +1269,22 @@ def lora_tab(
             ],
             headless=headless,
         )
-
-        with gr.Tab('Folders'):
-            folders = Folders(headless=headless)
             
-        with gr.Tab('Parameters'):
-
-            def list_presets(path):
-                json_files = []
-                
-                for file in os.listdir(path):
-                    if file.endswith('.json'):
-                        json_files.append(os.path.splitext(file)[0])
-                        
-                user_presets_path = os.path.join(path, 'user_presets')
-                if os.path.isdir(user_presets_path):
-                    for file in os.listdir(user_presets_path):
-                        if file.endswith('.json'):
-                            preset_name = os.path.splitext(file)[0]
-                            json_files.append(os.path.join('user_presets', preset_name))
-                
-                return json_files
-            
-            training_preset = gr.Dropdown(
-                label='Presets',
-                choices=list_presets('./presets/lora'),
-                elem_id='myDropdown',
-            )
+        with gr.Tab('5. Parameters'):
+            with gr.Row():
+                training_preset = gr.Dropdown(
+                    label='Presets',
+                    choices=sorted(get_preset_lists()),
+                    #elem_id='myDropdown',
+                )
+                with gr.Row():
+                    create_refresh_button(
+                        training_preset,
+                        get_preset_lists,
+                        lambda: {"choices": sorted(
+                            get_preset_lists())},
+                        "refresh preset list",
+                    )
             with gr.Row():
                 LoRA_type = gr.Dropdown(
                     label='LoRA type',
@@ -1539,27 +1777,28 @@ def lora_tab(
             advanced_training.max_timestep,
         ]
 
-        config.button_open_config.click(
-            open_configuration,
-            inputs=[dummy_db_true, dummy_db_false, config.config_file_name]
-            + settings_list
-            + [training_preset],
-            outputs=[config.config_file_name]
-            + settings_list
-            + [training_preset, LoCon_row],
-            show_progress=False,
-        )
+        #config.button_open_config.click(
+        #    open_configuration,
+        #    inputs=[dummy_db_true, dummy_db_false, config.config_file_name]
+        #    + settings_list
+        #    + [training_preset],
+        #    outputs=[config.config_file_name]
+        #    + settings_list
+        #    + [training_preset, LoCon_row],
+        #    show_progress=False,
+        #)
 
-        config.button_load_config.click(
-            open_configuration,
-            inputs=[dummy_db_false, dummy_db_false, config.config_file_name]
-            + settings_list
-            + [training_preset],
-            outputs=[config.config_file_name]
-            + settings_list
-            + [training_preset, LoCon_row],
-            show_progress=False,
-        )
+        #config.button_load_config.click(
+        #    open_configuration,
+        #    inputs=[dummy_db_false, dummy_db_false, config.config_file_name]
+        #    + settings_list
+        #    + [training_preset],
+        #    outputs=[config.config_file_name]
+        #    + settings_list
+        #    + [training_preset, LoCon_row],
+        #    show_progress=False,
+        #)
+
 
         training_preset.input(
             open_configuration,
@@ -1577,15 +1816,20 @@ def lora_tab(
             show_progress=False,
         )
 
-        config.button_save_as_config.click(
-            save_configuration,
-            inputs=[dummy_db_true, config.config_file_name] + settings_list,
-            outputs=[config.config_file_name],
-            show_progress=False,
-        )
+        #config.button_save_as_config.click(
+        #    save_configuration,
+        #    inputs=[dummy_db_true, config.config_file_name] + settings_list,
+        #    outputs=[config.config_file_name],
+        #    show_progress=False,
+        #)
 
         button_run.click(
             train_model,
+            inputs=[dummy_headless] + [dummy_db_false] + settings_list,
+            show_progress=False,
+        )
+        button_run.click(
+            save_configuration_gcp_log,
             inputs=[dummy_headless] + [dummy_db_false] + settings_list,
             show_progress=False,
         )
@@ -1600,17 +1844,17 @@ def lora_tab(
             show_progress=False,
         )
         
-    with gr.Tab('Tools'):
-        lora_tools = LoRATools(folders=folders, headless=headless)
+    #with gr.Tab('Tools'):
+    #    lora_tools = LoRATools(folders=folders, headless=headless)
         
-    with gr.Tab('Guides'):
-        gr.Markdown(
-            'This section provide Various LoRA guides and information...'
-        )
-        if os.path.exists('./docs/LoRA/top_level.md'):
-            with open(os.path.join('./docs/LoRA/top_level.md'), 'r', encoding='utf8') as file:
-                guides_top_level = file.read() + '\n'
-        gr.Markdown(guides_top_level)
+    # with gr.Tab('Guides'):
+    #     gr.Markdown(
+    #         'This section provide Various LoRA guides and information...'
+    #     )
+    #     if os.path.exists('./docs/LoRA/top_level.md'):
+    #         with open(os.path.join('./docs/LoRA/top_level.md'), 'r', encoding='utf8') as file:
+    #             guides_top_level = file.read() + '\n'
+    #     gr.Markdown(guides_top_level)
 
     return (
         folders.train_data_dir,
@@ -1636,22 +1880,22 @@ def UI(**kwargs):
     )
 
     with interface:
-        with gr.Tab('LoRA'):
-            (
-                train_data_dir_input,
-                reg_data_dir_input,
-                output_dir_input,
-                logging_dir_input,
-            ) = lora_tab(headless=headless)
-        with gr.Tab('Utilities'):
-            utilities_tab(
-                train_data_dir_input=train_data_dir_input,
-                reg_data_dir_input=reg_data_dir_input,
-                output_dir_input=output_dir_input,
-                logging_dir_input=logging_dir_input,
-                enable_copy_info_button=True,
-                headless=headless,
-            )
+        #with gr.Tab('LoRA'):
+        (
+            train_data_dir_input,
+            reg_data_dir_input,
+            output_dir_input,
+            logging_dir_input,
+        ) = lora_tab(headless=headless)
+        #with gr.Tab('Utilities'):
+        #    utilities_tab(
+        #        train_data_dir_input=train_data_dir_input,
+        #        reg_data_dir_input=reg_data_dir_input,
+        #        output_dir_input=output_dir_input,
+        #        logging_dir_input=logging_dir_input,
+        #        enable_copy_info_button=True,
+        #        headless=headless,
+        #    )
 
     # Show the interface
     launch_kwargs = {}
